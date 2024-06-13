@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/aws/amazon-vpc-cni-plugins/network/vpc"
+	"github.com/aws/amazon-vpc-cni-plugins/plugins/vpc-bridge/common"
 
 	"github.com/Microsoft/hcsshim"
 	"github.com/Microsoft/hcsshim/hcn"
@@ -61,6 +62,9 @@ const (
 var (
 	// hnsMinVersion is the minimum version of HNS supported by this plugin.
 	hnsMinVersion = hcsshim.HNSVersion1803
+
+	// Named Lock Manager for network and endpoint creation/deletion
+	namedLockManager = common.NewNamedLockManager()
 )
 
 // BridgeBuilder implements NetworkBuilder interface by bridging containers to an ENI on Windows.
@@ -81,6 +85,10 @@ func (nb *BridgeBuilder) FindOrCreateNetwork(nw *Network) error {
 
 	// Check if the network already exists.
 	networkName := nb.generateHNSNetworkName(nw)
+
+	namedLockManager.Lock(networkName)
+	defer namedLockManager.Unlock(networkName)
+
 	hcnNetwork, err := hcn.GetNetworkByName(networkName)
 	if err == nil {
 		log.Infof("Found existing HCN network %s.", networkName)
@@ -141,6 +149,10 @@ func (nb *BridgeBuilder) FindOrCreateNetwork(nw *Network) error {
 func (nb *BridgeBuilder) DeleteNetwork(nw *Network) error {
 	// Find the HCN network ID.
 	networkName := nb.generateHNSNetworkName(nw)
+
+	namedLockManager.Lock(networkName)
+	defer namedLockManager.Unlock(networkName)
+
 	hcnNetwork, err := hcn.GetNetworkByName(networkName)
 	if err != nil {
 		return err
@@ -168,6 +180,10 @@ func (nb *BridgeBuilder) FindOrCreateEndpoint(nw *Network, ep *Endpoint) error {
 
 	// Check if the endpoint already exists.
 	endpointName := nb.generateHNSEndpointName(ep, namespaceIdentifier)
+
+	namedLockManager.Lock(endpointName)
+	defer namedLockManager.Unlock(endpointName)
+
 	hcnEndpoint, err := hcn.GetEndpointByName(endpointName)
 	if err == nil {
 		log.Infof("Found existing HCN endpoint %s.", endpointName)
@@ -341,6 +357,10 @@ func (nb *BridgeBuilder) DeleteEndpoint(nw *Network, ep *Endpoint) error {
 
 	// Find the HCN endpoint ID.
 	endpointName := nb.generateHNSEndpointName(ep, namespaceIdentifier)
+
+	namedLockManager.Lock(endpointName)
+	defer namedLockManager.Unlock(endpointName)
+
 	hcnEndpoint, err := hcn.GetEndpointByName(endpointName)
 	if err != nil {
 		return err
